@@ -1,0 +1,5 @@
+{
+  "name": "SteelTrack AI",
+  "description": "Vision engine for forklift tracking in wholesale supermarkets.",
+  "requestFramePermissions": []
+}
