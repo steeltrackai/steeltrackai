@@ -1,0 +1,46 @@
+services:
+  # Local Database - Digital Twin Mirror
+  postgres_local:
+    image: postgres:15-alpine
+    container_name: steeltrack_db_local
+    environment:
+      POSTGRES_USER: steeladmin
+      POSTGRES_PASSWORD: steelpassword
+      POSTGRES_DB: steeltrack_local
+    ports:
+      - "5433:5432" # Use 5433 to avoid conflict with local postgres
+    volumes:
+      - ./local_server/db_init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  # Vector Database - Visual Similarity Search
+  qdrant_local:
+    image: qdrant/qdrant:latest
+    container_name: steeltrack_qdrant_local
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: always
+
+  # Ingestion Engine - FastAPI
+  api_local:
+    build: 
+      context: ./local_server
+      dockerfile: Dockerfile
+    container_name: steeltrack_api_local
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://steeladmin:steelpassword@postgres_local:5432/steeltrack_local
+      - QDRANT_URL=http://qdrant_local:6333
+    depends_on:
+      - postgres_local
+      - qdrant_local
+    restart: always
+
+volumes:
+  postgres_data:
+  qdrant_data:

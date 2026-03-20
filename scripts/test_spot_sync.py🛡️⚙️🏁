@@ -1,0 +1,41 @@
+import requests
+import time
+
+BASE_URL = "http://localhost:8085"
+
+def test_spot_persistence():
+    # 1. Get current spots
+    resp = requests.get(f"{BASE_URL}/floor-spots")
+    spots = resp.json()
+    if not spots:
+        print("No spots found to test with.")
+        return
+    
+    target_spot = spots[0]
+    original_coords = (target_spot['x'], target_spot['y'])
+    new_coords = (original_coords[0] + 1.0, original_coords[1] + 1.0)
+    
+    print(f"Testing Spot {target_spot['id']} ({target_spot['name']})")
+    print(f"Original: {original_coords} -> New: {new_coords}")
+    
+    # 2. Update spot
+    update_resp = requests.put(f"{BASE_URL}/floor-spots/{target_spot['id']}", json={
+        "x": new_coords[0],
+        "y": new_coords[1]
+    })
+    print(f"Update response: {update_resp.json()}")
+    
+    # 3. Immediately fetch again
+    fetch_resp = requests.get(f"{BASE_URL}/floor-spots")
+    updated_spots = fetch_resp.json()
+    updated_spot = next(s for s in updated_spots if s['id'] == target_spot['id'])
+    
+    print(f"Fetched immediately: ({updated_spot['x']}, {updated_spot['y']})")
+    
+    if abs(updated_spot['x'] - new_coords[0]) < 0.01:
+        print("SUCCESS: Persistence is immediate.")
+    else:
+        print("FAILURE: Persistence lag or error detected.")
+
+if __name__ == "__main__":
+    test_spot_persistence()

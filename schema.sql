@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS pallets (
     pallet_id_tag TEXT UNIQUE NOT NULL, -- The ArUco/QR hash (Opaque ID)
     sku_name TEXT NOT NULL,
     quantity INTEGER DEFAULT 0,
+    erp_quantity INTEGER DEFAULT 0, -- What the ERP says should be there
+    status TEXT DEFAULT 'standard', -- standard, near_expiry, partial, finished
     expiry_date DATE,
     image_url TEXT, -- Reference to Supabase Storage for visual audit
     embedding vector(768), -- For visual similarity search (Gemini embeddings)
@@ -78,11 +80,11 @@ ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE warehouse_layout ENABLE ROW LEVEL SECURITY;
 ALTER TABLE forklift_status ENABLE ROW LEVEL SECURITY;
 
--- Allow authenticated users to read and write (simplified for initial setup)
--- In production, these should be more restrictive.
-CREATE POLICY "Allow authenticated users" ON pallets FOR ALL TO authenticated USING (true);
-CREATE POLICY "Allow authenticated users" ON locations FOR ALL TO authenticated USING (true);
-CREATE POLICY "Allow authenticated users" ON activities FOR ALL TO authenticated USING (true);
-CREATE POLICY "Allow authenticated users" ON tasks FOR ALL TO authenticated USING (true);
-CREATE POLICY "Allow authenticated users" ON warehouse_layout FOR ALL TO authenticated USING (true);
-CREATE POLICY "Allow authenticated users" ON forklift_status FOR ALL TO authenticated USING (true);
+-- Allow ALL users (including anonymous) for testing/initial setup
+-- WARNING: In production, change 'public' to 'authenticated' and use Supabase Auth.
+CREATE POLICY "Allow public access" ON pallets FOR ALL USING (true);
+CREATE POLICY "Allow public access" ON locations FOR ALL USING (true);
+CREATE POLICY "Allow public access" ON activities FOR ALL USING (true);
+CREATE POLICY "Allow public access" ON tasks FOR ALL USING (true);
+CREATE POLICY "Allow public access" ON warehouse_layout FOR ALL USING (true);
+CREATE POLICY "Allow public access" ON forklift_status FOR ALL USING (true);

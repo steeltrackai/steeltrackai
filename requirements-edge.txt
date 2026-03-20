@@ -1,0 +1,9 @@
+opencv-python
+mediapipe
+llama-cpp-python
+sqlalchemy
+numpy
+pillow
+fastapi
+uvicorn
+requests
