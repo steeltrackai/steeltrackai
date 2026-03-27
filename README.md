@@ -1,20 +1,25 @@
+---
+title: SteelTrack AI
+emoji: 📡
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 <div align="center">
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# MapX Intelligence Registry Recovery
 
-This contains everything you need to run your app locally.
+This repository contains the autonomous discovery pipeline for SteelTrack AI.
 
-View your app in AI Studio: https://ai.studio/apps/f4d66ba0-8813-4490-9918-ee4578a5005c
+## Infrastructure
+- **Cloud-Brain**: Hugging Face Space (Docker) running Qwen2.5-VL.
+- **Registry**: Cloudflare D1.
+- **Scavenger**: GCP Autonomous Daemon.
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Local Setup
+1. `npm install`
+2. `npm run dev`
