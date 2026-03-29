@@ -32,8 +32,9 @@ jobs:
           CF_WORKER_URL: ${{ secrets.CF_WORKER_URL }}
           WEBSHARE_USER: ${{ secrets.WEBSHARE_USER }}
           WEBSHARE_PASS: ${{ secrets.WEBSHARE_PASS }}
-          GITHUB_ACTIONS: "true"
-        run: python scripts/CostcoNodriverHarvester.py
+          PYTHONUTF8: 1
+        run: |
+          python scripts/CostcoNodriverHarvester.py
 
       - name: Commit Progress
         run: |
