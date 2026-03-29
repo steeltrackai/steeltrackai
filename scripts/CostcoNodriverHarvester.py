@@ -89,21 +89,25 @@ class IndustrialCostcoFleet:
         async with async_playwright() as p:
             log(f"🚀 [Fleet] Launching Proxied Playwright session...")
             
-            # Try launching with/without proxy depending on environment
-            browser_args = {}
-            if os.getenv("GITHUB_ACTIONS"):
-                log("☁️ [CI] Detected GitHub Actions Environment.")
-            else:
+            # 1. Primary Attempt (Direct Playwright)
+            browser_args = {
+                "headless": True,
+                "args": ["--disable-http2", "--no-sandbox", "--disable-setuid-sandbox"]
+            }
+            
+            if not os.getenv("GITHUB_ACTIONS"):
                 browser_args["proxy"] = {"server": PROXY_URL, "username": PROXY_USER, "password": PROXY_PASS}
 
-            browser = await p.chromium.launch(headless=True, **browser_args)
+            browser = await p.chromium.launch(**browser_args)
             context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                viewport={'width': 1920, 'height': 1080}
             )
             
             page = await context.new_page()
             await Stealth().apply_stealth_async(page)
-            await page.route("**/*", self.block_resources)
+            # Remove resource routing to see if it fixes the HTTP2 error
+            # await page.route("**/*", self.block_resources)
             
             try:
                 for i, url in enumerate(targets):
