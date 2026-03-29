@@ -37,6 +37,11 @@ jobs:
         run: |
           git config --global user.name "SteelTrack AI Bot"
           git config --global user.email "bot@steeltrack.ai"
-          git add scripts/costco_done.txt
-          git commit -m "💎 [Stash] Updated catalog progress [skip ci]" || echo "No changes to commit"
-          git push
+          # Safely check if file exists before adding
+          if [ -f scripts/costco_done.txt ]; then
+            git add scripts/costco_done.txt
+            git commit -m "💎 [Stash] Updated catalog progress [skip ci]" || echo "No changes to commit"
+            git push
+          else
+            echo "No progress file found. Skipping commit."
+          fi
