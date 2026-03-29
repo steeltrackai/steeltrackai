@@ -51,14 +51,7 @@ class IndustrialCostcoFleet:
             with open(DONE_FILE, 'r') as f:
                 self.done = set(line.strip() for line in f)
         
-        log(f"🏗️ [Industrial] Initialized (Ninjutsu v56.17). Queue: {len(self.queue)} | Stashed: {len(self.done)}")
-
-    async def block_resources(self, route):
-        r_type = route.request.resource_type
-        if r_type in ["image", "media", "font"]:
-            await route.abort()
-        else:
-            await route.continue_()
+        log(f"🏗️ [Industrial] Initialized (Ninjutsu v56.20). Queue: {len(self.queue)} | Stashed: {len(self.done)}")
 
     async def ingest_catalog(self, batch_limit=50):
         targets = [u for u in self.queue if u not in self.done][:batch_limit]
@@ -69,53 +62,67 @@ class IndustrialCostcoFleet:
         async with async_playwright() as p:
             log(f"🚀 [Fleet] Launching Proxied Playwright session...")
             
-            # Browser Hardening (v56.17)
+            # Browser Hardening (v56.20)
             browser_args = {
                 "headless": True,
                 "args": ["--disable-http2", "--no-sandbox", "--disable-setuid-sandbox"]
             }
             
-            if not os.getenv("GITHUB_ACTIONS"):
-                browser_args["proxy"] = {"server": PROXY_URL, "username": PROXY_USER, "password": PROXY_PASS}
+            # Use proxy even in GHA if the IP range is dirty
+            browser_args["proxy"] = {"server": PROXY_URL, "username": PROXY_USER, "password": PROXY_PASS}
 
             browser = await p.chromium.launch(**browser_args)
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                viewport={'width': 1920, 'height': 1080}
+                viewport={'width': 1920, 'height': 1080},
+                ignore_https_errors=True
             )
             
             page = await context.new_page()
             await Stealth().apply_stealth_async(page)
-            # Re-enable resource blocking for speed
-            await page.route("**/*", self.block_resources)
             
             try:
-                # MANEUVER 3: Warm up with Home Page (Optimized)
-                log("🏠 [Warmup] Seeding session cookies via Costco Home...")
-                await page.goto("https://www.costco.ca/", wait_until="domcontentloaded", timeout=45000)
-                await asyncio.sleep(12)
-                
                 for i, raw_url in enumerate(targets):
                     try:
-                        # MANEUVER 2: Unquote URL
                         url = unquote(raw_url)
                         log(f"🚢 [Scout] Surveying ({i+1}/{len(targets)}): {url.split('/')[-1]}")
                         
-                        # 1. Primary Attempt
-                        await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                        await asyncio.sleep(5)
-                        
-                        html = await page.content()
-                        self.total_bytes += len(html)
+                        # MANEUVER: The Google Ghost Trojan
+                        ghost_url = f"https://translate.google.com/translate?sl=auto&tl=en&u={url}"
                         
                         blocks = []
-                        if "Access Denied" in html or "Access Denied" in (await page.title()) or len(html) < 5000:
-                            log("🛑 [Block] Akamai detected. (Soft-Reset or 403)")
-                            # Fallback logic could go here, but with HTTP/1.1 it should work
-                        else:
-                            blocks = await page.evaluate("() => Array.from(document.querySelectorAll(\"script[type*='ld+json']\")).map(s => s.innerText)")
+                        html = ""
                         
-                        if not blocks and not "Access Denied" in html:
+                        try:
+                            log("👻 [Ghost] Bypassing Akamai via Google...")
+                            await page.goto(ghost_url, wait_until="domcontentloaded", timeout=45000)
+                            await asyncio.sleep(8)
+                            
+                            html = await page.content()
+                            blocks = await page.evaluate("""() => {
+                                let found = [];
+                                function scan(doc) {
+                                    doc.querySelectorAll("script[type*='ld+json']").forEach(s => found.push(s.innerText));
+                                }
+                                scan(document);
+                                document.querySelectorAll("iframe").forEach(f => {
+                                    try { scan(f.contentDocument); } catch(e) {}
+                                });
+                                return found;
+                            }""")
+                        except Exception as ge:
+                            log(f"⚠️ [Ghost] Failed: {str(ge)[:50]}")
+                            
+                        if not blocks:
+                            log("🎯 [Direct] Falling back to direct secure-load...")
+                            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                            await asyncio.sleep(5)
+                            html = await page.content()
+                            blocks = await page.evaluate("() => Array.from(document.querySelectorAll(\"script[type*='ld+json']\")).map(s => s.innerText)")
+
+                        self.total_bytes += len(html)
+                        
+                        if not blocks:
                             soup = BeautifulSoup(html, 'html.parser')
                             blocks = [s.string for s in soup.find_all("script", type=re.compile(r"application/ld\+json", re.I)) if s.string]
 
@@ -149,7 +156,7 @@ class IndustrialCostcoFleet:
                             p_brand = p_brand_obj.get("name", "Costco") if isinstance(p_brand_obj, dict) else str(p_brand_obj)
                             full_name = f"{p_brand} {p_name}"
                             
-                            # Uplink
+                            # Uplink to Registry
                             requests.post(UPLINK_URL, json={
                                 "id": generate_deterministic_id(url),
                                 "product_name": full_name,
@@ -171,7 +178,7 @@ class IndustrialCostcoFleet:
 
 async def run_mission():
     fleet = IndustrialCostcoFleet()
-    await fleet.ingest_catalog(batch_limit=10) # Small batch for validation
+    await fleet.ingest_catalog(batch_limit=10)
 
 if __name__ == "__main__":
     asyncio.run(run_mission())
