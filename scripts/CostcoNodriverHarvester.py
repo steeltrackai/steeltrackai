@@ -7,6 +7,7 @@ import hashlib
 import asyncio
 import requests
 import traceback
+from urllib.parse import unquote
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 from bs4 import BeautifulSoup
@@ -50,35 +51,7 @@ class IndustrialCostcoFleet:
             with open(DONE_FILE, 'r') as f:
                 self.done = set(line.strip() for line in f)
         
-        log(f"🏗️ [Industrial] Initialized (Ninjutsu v56.13). Queue: {len(self.queue)} | Stashed: {len(self.done)}")
-
-    async def block_resources(self, route):
-        r_type = route.request.resource_type
-        if r_type in ["image", "media", "font"]:
-            await route.abort()
-        else:
-            await route.continue_()
-
-    def fetch_via_ninja_mask(self, url):
-        """Google Translate Proxy Fallback"""
-        log(f"🎭 [Mask] Activating Google Translate Proxy for: {url.split('/')[-1]}")
-        t_url = f"https://translate.google.com/translate?sl=auto&tl=en&u={url}"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        
-        try:
-            r = requests.get(t_url, headers=headers, timeout=30)
-            if "application/ld+json" in r.text:
-                soup = BeautifulSoup(r.text, 'html.parser')
-                blocks = [s.string for s in soup.find_all("script", type="application/ld+json") if s.string]
-                return blocks
-            return []
-        except Exception as e:
-            log(f"⚠️ [Mask] Proxy failed: {e}")
-            return []
+        log(f"🏗️ [Industrial] Initialized (Ninjutsu v56.16). Queue: {len(self.queue)} | Stashed: {len(self.done)}")
 
     async def ingest_catalog(self, batch_limit=50):
         targets = [u for u in self.queue if u not in self.done][:batch_limit]
@@ -89,7 +62,7 @@ class IndustrialCostcoFleet:
         async with async_playwright() as p:
             log(f"🚀 [Fleet] Launching Proxied Playwright session...")
             
-            # 1. Primary Attempt (Direct Playwright)
+            # Browser Hardening (v56.16)
             browser_args = {
                 "headless": True,
                 "args": ["--disable-http2", "--no-sandbox", "--disable-setuid-sandbox"]
@@ -106,25 +79,30 @@ class IndustrialCostcoFleet:
             
             page = await context.new_page()
             await Stealth().apply_stealth_async(page)
-            # Remove resource routing to see if it fixes the HTTP2 error
-            # await page.route("**/*", self.block_resources)
             
             try:
-                for i, url in enumerate(targets):
+                # MANEUVER 3: Warm up with Home Page
+                log("🏠 [Warmup] Seeding session cookies via Costco Home...")
+                await page.goto("https://www.costco.ca/", wait_until="networkidle", timeout=60000)
+                await asyncio.sleep(8)
+                
+                for i, raw_url in enumerate(targets):
                     try:
+                        # MANEUVER 2: Unquote URL
+                        url = unquote(raw_url)
                         log(f"🚢 [Scout] Surveying ({i+1}/{len(targets)}): {url.split('/')[-1]}")
                         
-                        # 1. Primary Attempt (Direct Playwright)
+                        # 1. Primary Attempt
                         await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                        await asyncio.sleep(10)
+                        await asyncio.sleep(5)
                         
                         html = await page.content()
                         self.total_bytes += len(html)
                         
                         blocks = []
-                        if "Access Denied" in html or "Access Denied" in (await page.title()):
-                            log("🛑 [Block] Akamai detected. Rotating to Ninja Mask...")
-                            blocks = self.fetch_via_ninja_mask(url)
+                        if "Access Denied" in html or "Access Denied" in (await page.title()) or len(html) < 5000:
+                            log("🛑 [Block] Akamai detected. (Soft-Reset or 403)")
+                            # Fallback logic could go here, but with HTTP/1.1 it should work
                         else:
                             blocks = await page.evaluate("() => Array.from(document.querySelectorAll(\"script[type*='ld+json']\")).map(s => s.innerText)")
                         
@@ -169,22 +147,22 @@ class IndustrialCostcoFleet:
                                 "scout_id": "Costco-Ninjutsu-v56"
                             }, timeout=10)
                             
-                            with open(DONE_FILE, "a") as f: f.write(url + "\n")
-                            self.done.add(url)
+                            with open(DONE_FILE, "a") as f: f.write(raw_url + "\n")
+                            self.done.add(raw_url)
                             log(f"💎 [Stashed] {p_sku} | {full_name}")
                         else:
-                            log(f"⚠️ [Empty] No signature found. | Est: {self.total_bytes/1024/1024:.2f}MB")
+                            log(f"⚠️ [Empty] No signature found. | Content-Length: {len(html)/1024:.1f}KB")
                             
-                        await asyncio.sleep(random.uniform(3.0, 7.0))
+                        await asyncio.sleep(random.uniform(5.0, 10.0))
                     except Exception as e:
-                        log(f"❌ [Fail] Scout lost: {str(e)}")
+                        log(f"❌ [Fail] Scout lost: {str(e)[:100]}")
                         
             finally:
                 await browser.close()
 
 async def run_mission():
     fleet = IndustrialCostcoFleet()
-    await fleet.ingest_catalog(batch_limit=100)
+    await fleet.ingest_catalog(batch_limit=10) # Small batch for validation
 
 if __name__ == "__main__":
     asyncio.run(run_mission())
