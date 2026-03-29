@@ -51,7 +51,7 @@ class IndustrialCostcoFleet:
             with open(DONE_FILE, 'r') as f:
                 self.done = set(line.strip() for line in f)
         
-        log(f"🏗️ [Industrial] Initialized (Ninjutsu v56.20). Queue: {len(self.queue)} | Stashed: {len(self.done)}")
+        log(f"🏗️ [Industrial] Initialized (Ninjutsu v56.22). Queue: {len(self.queue)} | Stashed: {len(self.done)}")
 
     async def ingest_catalog(self, batch_limit=50):
         targets = [u for u in self.queue if u not in self.done][:batch_limit]
@@ -62,18 +62,24 @@ class IndustrialCostcoFleet:
         async with async_playwright() as p:
             log(f"🚀 [Fleet] Launching Proxied Playwright session...")
             
-            # Browser Hardening (v56.20)
+            # Browser Hardening (v56.22)
             browser_args = {
                 "headless": True,
-                "args": ["--disable-http2", "--no-sandbox", "--disable-setuid-sandbox"]
+                "args": [
+                    "--disable-http2", 
+                    "--no-sandbox", 
+                    "--disable-setuid-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-web-security"
+                ]
             }
             
-            # Use proxy even in GHA if the IP range is dirty
+            # FORCE RESIDENTIAL PROXY
             browser_args["proxy"] = {"server": PROXY_URL, "username": PROXY_USER, "password": PROXY_PASS}
 
             browser = await p.chromium.launch(**browser_args)
             context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
                 viewport={'width': 1920, 'height': 1080},
                 ignore_https_errors=True
             )
@@ -87,21 +93,29 @@ class IndustrialCostcoFleet:
                         url = unquote(raw_url)
                         log(f"🚢 [Scout] Surveying ({i+1}/{len(targets)}): {url.split('/')[-1]}")
                         
-                        # MANEUVER: The Google Ghost Trojan
-                        ghost_url = f"https://translate.google.com/translate?sl=auto&tl=en&u={url}"
+                        # 1. Primary Attempt (Direct Proxied)
+                        log("🎯 [Direct] Attempting Secure Load...")
+                        await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                        await asyncio.sleep(15) # Longer wait for Akamai JS challenge
+                        
+                        html = await page.content()
+                        self.total_bytes += len(html)
                         
                         blocks = []
-                        html = ""
-                        
-                        try:
-                            log("👻 [Ghost] Bypassing Akamai via Google...")
-                            await page.goto(ghost_url, wait_until="domcontentloaded", timeout=45000)
-                            await asyncio.sleep(8)
+                        # DIAGNOSTIC: Why is it 0.4KB?
+                        if len(html) < 2000:
+                            log(f"⚠️ [Low-Content] HTML is only {len(html)} bytes. Head: {html[:150].strip()}")
                             
+                            # FALLBACK: Try Google Ghost ONLY if direct fails
+                            log("👻 [Ghost] Fallback to Google Translate Proxy...")
+                            ghost_url = f"https://translate.google.com/translate?sl=auto&tl=en&u={url}"
+                            await page.goto(ghost_url, wait_until="domcontentloaded", timeout=45000)
+                            await asyncio.sleep(12)
                             html = await page.content()
                             blocks = await page.evaluate("""() => {
                                 let found = [];
                                 function scan(doc) {
+                                    if(!doc) return;
                                     doc.querySelectorAll("script[type*='ld+json']").forEach(s => found.push(s.innerText));
                                 }
                                 scan(document);
@@ -110,18 +124,10 @@ class IndustrialCostcoFleet:
                                 });
                                 return found;
                             }""")
-                        except Exception as ge:
-                            log(f"⚠️ [Ghost] Failed: {str(ge)[:50]}")
-                            
+
                         if not blocks:
-                            log("🎯 [Direct] Falling back to direct secure-load...")
-                            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                            await asyncio.sleep(5)
-                            html = await page.content()
                             blocks = await page.evaluate("() => Array.from(document.querySelectorAll(\"script[type*='ld+json']\")).map(s => s.innerText)")
 
-                        self.total_bytes += len(html)
-                        
                         if not blocks:
                             soup = BeautifulSoup(html, 'html.parser')
                             blocks = [s.string for s in soup.find_all("script", type=re.compile(r"application/ld\+json", re.I)) if s.string]
