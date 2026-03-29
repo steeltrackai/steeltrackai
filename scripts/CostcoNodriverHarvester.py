@@ -51,7 +51,14 @@ class IndustrialCostcoFleet:
             with open(DONE_FILE, 'r') as f:
                 self.done = set(line.strip() for line in f)
         
-        log(f"🏗️ [Industrial] Initialized (Ninjutsu v56.16). Queue: {len(self.queue)} | Stashed: {len(self.done)}")
+        log(f"🏗️ [Industrial] Initialized (Ninjutsu v56.17). Queue: {len(self.queue)} | Stashed: {len(self.done)}")
+
+    async def block_resources(self, route):
+        r_type = route.request.resource_type
+        if r_type in ["image", "media", "font"]:
+            await route.abort()
+        else:
+            await route.continue_()
 
     async def ingest_catalog(self, batch_limit=50):
         targets = [u for u in self.queue if u not in self.done][:batch_limit]
@@ -62,7 +69,7 @@ class IndustrialCostcoFleet:
         async with async_playwright() as p:
             log(f"🚀 [Fleet] Launching Proxied Playwright session...")
             
-            # Browser Hardening (v56.16)
+            # Browser Hardening (v56.17)
             browser_args = {
                 "headless": True,
                 "args": ["--disable-http2", "--no-sandbox", "--disable-setuid-sandbox"]
@@ -79,12 +86,14 @@ class IndustrialCostcoFleet:
             
             page = await context.new_page()
             await Stealth().apply_stealth_async(page)
+            # Re-enable resource blocking for speed
+            await page.route("**/*", self.block_resources)
             
             try:
-                # MANEUVER 3: Warm up with Home Page
+                # MANEUVER 3: Warm up with Home Page (Optimized)
                 log("🏠 [Warmup] Seeding session cookies via Costco Home...")
-                await page.goto("https://www.costco.ca/", wait_until="networkidle", timeout=60000)
-                await asyncio.sleep(8)
+                await page.goto("https://www.costco.ca/", wait_until="domcontentloaded", timeout=45000)
+                await asyncio.sleep(12)
                 
                 for i, raw_url in enumerate(targets):
                     try:
